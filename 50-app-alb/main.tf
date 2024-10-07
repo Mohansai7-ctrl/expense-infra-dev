@@ -16,6 +16,7 @@ module "app_alb" {
   )
 }
 
+#creating load balance listener for load balancer
 resource "aws_lb_listener" "http" {
   load_balancer_arn = module.app_alb.arn
   port              = "80"

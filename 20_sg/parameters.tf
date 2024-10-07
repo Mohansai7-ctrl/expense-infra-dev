@@ -35,3 +35,10 @@ resource "aws_ssm_parameter" "app_alb_sg_id" {
     value = module.app_alb_sg.id
     type = "String"
 }
+
+#exporting the security group of vpn to ssm
+resource "aws_ssm_parameter" "vpn_sg_id" {
+    name = "/${var.project_name}/${var.environment}/vpn_sg_id"
+    value = module.vpn_sg.id
+    type = "String"
+}

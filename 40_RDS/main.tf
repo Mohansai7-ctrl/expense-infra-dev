@@ -34,6 +34,9 @@ module "db" {
   # DB option group
   major_engine_version = "8.0"
 
+  # enable_deletion_protection = false #if it is set to true then db cannot be deleted.  This should be placed for load balancer
+  # for rds, argument is deletion_protection = false
+
   skip_final_snapshot = true
 
   parameters = [
@@ -69,6 +72,8 @@ module "db" {
 
 
 #creating rds expense db's endpoint as expense-dev.mohansai.online
+# as mysql-dev.mohansai.online points to rds db endpoint == module.db.db_instance_address
+
 module "records" {
     source = "terraform-aws-modules/route53/aws//modules/records"
 
@@ -80,7 +85,7 @@ module "records" {
             ttl = 1
             name = "mysql-${var.environment}"
             records = [
-                module.db.db_instance_address
+                module.db.db_instance_address  #It will give rds db Endpoint which was create by AWS RDS with given above inputs
 
             ]
             allow_overwrite = true
