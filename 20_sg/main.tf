@@ -321,3 +321,48 @@ resource "aws_security_group_rule" "backend_vpn_8080" {
     security_group_id = module.backend_sg.id
 }
 
+
+#creating security group for web_alb:
+module "web_alb_sg" {
+    source = "git::https://github.com/Mohansai7-ctrl/terraform-aws-security-group.git?ref=main"
+    vpc_id = local.vpc_id
+    project_name = var.project_name
+    environment = var.environment
+    common_tags = var.common_tags
+    sg_name = "web_alb"
+    sg_tags = var.web_alb_sg_tags
+}
+
+#creating security group rules for web_alb:
+#public(80-http) is connecting the web_alb:
+
+resource "aws_security_group_rule" "web_alb_public_http" {
+    type = "ingress"
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    security_group_id = module.web_alb_sg.id
+}
+
+#public(443-https) is connecting the web_alb:
+resource "aws_security_group_rule" "vpn_public_https" {
+    type = "ingress"
+    from_port = 443
+    to_port = 443
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    security_group_id = module.web_alb_sg.id
+}
+
+
+#web_alb is connecting the frontend application:
+
+resource "aws_security_group_rule" "frontend_web_alb" {
+    type = "ingress"
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    source_security_group_id = module.web_alb_sg.id
+    security_group_id = module.frontend_sg.id
+}

@@ -1,60 +1,60 @@
-#creating,configuring the backend server as an ec2 instance and then applying autoscaling as well :
-#Created backend server as ec2_instance
-module "backend" {
+#creating,configuring the frontend server as an ec2 instance and then applying autoscaling as well :
+#Created frontend server as ec2_instance
+module "frontend" {
     source = "terraform-aws-modules/ec2-instance/aws"
 
     name = local.resource_name
 
     ami = local.ami
     instance_type = "t3.micro"
-    vpc_security_group_ids = [local.backend_sg_id]
+    vpc_security_group_ids = [local.frontend_sg_id]
     subnet_id = local.private_subnet_ids
 
     tags = merge(
         var.common_tags,
-        var.backend_tags,
+        var.frontend_tags,
         {
             Name = local.resource_name
         }
     )
 }
 
-#Configuring the backend server using ansible playbook.
-# Here Variables are define in terraform and will be pushed/used in shell(backend.sh), then from shell to ansible.
+#Configuring the frontend server using ansible playbook.
+# Here Variables are define in terraform and will be pushed/used in shell(frontend.sh), then from shell to ansible.
 
-resource "null_resource" "backend" {
+resource "null_resource" "frontend" {
   # Changes to any instance of the cluster requires re-provisioning
-  triggers = {       #Whenver module.backend id changes (means any version change in backend application,) then null_resource triggers this instance id to execute the backend.sh in shell
-    instance_id = module.backend.id
+  triggers = {       #Whenver module.frontend id changes (means any version change in frontend application,) then null_resource triggers this instance id to execute the frontend.sh in shell
+    instance_id = module.frontend.id
   }
 
   # Bootstrap script can run on any instance of the cluster
   # So we just choose the first in this case
   connection {
-    host = module.backend.private_ip  #Connecting to remote server which is backend server via its private_ip
+    host = module.frontend.private_ip  #Connecting to remote server which is frontend server via its private_ip
     user = "ec2-user"
     password = "DevOps321"
     type = "ssh"
   }
 
 
-  #Copying the backend.sh file into backend server /tmp folder from local(laptop where this code and terraform is installed)
+  #Copying the frontend.sh file into frontend server /tmp folder from local(laptop where this code and terraform is installed)
   provisioner "file" {
-    source = "${var.backend_tags.Component}.sh"   
-    destination = "/tmp/backend.sh"  #this is inside the backend application server
+    source = "${var.frontend_tags.Component}.sh"   
+    destination = "/tmp/frontend.sh"  #this is inside the frontend application server
   }
 
-  #executing the backend.sh inside the backend server
+  #executing the frontend.sh inside the frontend server
   provisioner "remote-exec" {
     # Bootstrap script called with private_ip of each node in the cluster
     inline = [
-      "chmod +x /tmp/backend.sh",
-      "sudo sh /tmp/backend.sh ${var.backend_tags.Component} ${var.environment}"  #sudo sh file_name.sh $1 == var.backend_tags.Component, $2 == var.environment. These arguments from Terraform ---> shell
+      "chmod +x /tmp/frontend.sh",
+      "sudo sh /tmp/frontend.sh ${var.frontend_tags.Component} ${var.environment}"  #sudo sh file_name.sh $1 == var.frontend_tags.Component, $2 == var.environment. These arguments from Terraform ---> shell
     ]
   }
 }
 
-#After the backend application is configured, perform health check by using below:
+#After the frontend application is configured, perform health check by using below:
 /* curl localhost:8080/health
 curl -I localhost:8080/health - It will give you below output:
 HTTP/1.1 200 OK
@@ -69,39 +69,39 @@ Keep-Alive: timeout=5 */
 
 
 #Now stop the instance to take AMI from it:
-resource "aws_ec2_instance_state" "backend" {
-  instance_id = module.backend.id
-  state       = "sto"
-  depends_on = [null_resource.backend]
+resource "aws_ec2_instance_state" "frontend" {
+  instance_id = module.frontend.id
+  state       = "stopped"
+  depends_on = [null_resource.frontend]
 }
 
 #Taking AMI From the instance:
-resource "aws_ami_from_instance" "backend" {
+resource "aws_ami_from_instance" "frontend" {
   name               = local.resource_name
-  source_instance_id = module.backend.id
-  depends_on = [aws_ec2_instance_state.backend]
+  source_instance_id = module.frontend.id
+  depends_on = [aws_ec2_instance_state.frontend]
 }
 
 
 #Terminate the created instance as AMI is taken already:
-resource "null_resource" "backend_delete" {
+resource "null_resource" "frontend_delete" {
   # Changes to any instance of the cluster requires re-provisioning
-  triggers = {       #Whenver module.backend id changes (means any version change in backend application,) then null_resource triggers this instance id to execue the backend.sh in shell
-    instance_id = module.backend.id
+  triggers = {       #Whenver module.frontend id changes (means any version change in frontend application,) then null_resource triggers this instance id to execue the frontend.sh in shell
+    instance_id = module.frontend.id
   }
 
  
   provisioner "local-exec" {  #as now it is inside the server, henve provisioning as local exec
-    command = "aws ec2 terminate-instances --instance-ids ${module.backend.id}"   #This is aws cli command to terminate instances
+    command = "aws ec2 terminate-instances --instance-ids ${module.frontend.id}"   #This is aws cli command to terminate instances
   }
 
-  depends_on = [aws_ami_from_instance.backend]
+  depends_on = [aws_ami_from_instance.frontend]
 }
 
 #Now creating target group resource:
-resource "aws_lb_target_group" "backend" {
+resource "aws_lb_target_group" "frontend" {
   name     = local.resource_name
-  port     = 8080    #This target group will get triggered when load balncer sends requests of 8080 port having protocol HTTP, it will send to backend application /its listener
+  port     = 8080    #This target group will get triggered when load balncer sends requests of 8080 port having protocol HTTP, it will send to frontend application /its listener
   protocol = "HTTP"
   vpc_id   = local.vpc_id
 
@@ -118,16 +118,16 @@ resource "aws_lb_target_group" "backend" {
 }
 
 #Creating Launch Template:
-resource "aws_launch_template" "backend" {   #To create auto-scaling we need to provide either launch_template or launch_configuration or mixed_instances_policy
+resource "aws_launch_template" "frontend" {   #To create auto-scaling we need to provide either launch_template or launch_configuration or mixed_instances_policy
   name = local.resource_name
 
-  image_id = aws_ami_from_instance.backend.id
+  image_id = aws_ami_from_instance.frontend.id
 
   instance_initiated_shutdown_behavior = "terminate"
 
   instance_type = "t3.micro"
 
-  vpc_security_group_ids = [local.backend_sg_id]
+  vpc_security_group_ids = [local.frontend_sg_id]
   update_default_version = true  #version should be latest
 
   tag_specifications {
@@ -142,7 +142,7 @@ resource "aws_launch_template" "backend" {   #To create auto-scaling we need to 
 }  #here subnet id is not provided, as we provided in below auto scaling
 
 #Create auto-scaling using launch template in target group:
-resource "aws_autoscaling_group" "backend" {
+resource "aws_autoscaling_group" "frontend" {
   name     = local.resource_name
   
   max_size                  = 10 #till 10 instances will be created using this autoscaling
@@ -151,10 +151,10 @@ resource "aws_autoscaling_group" "backend" {
   health_check_type         = "ELB"
   desired_capacity          = 2  #starting of autoscaling group with 2 instances
   #force_delete              = true
-  target_group_arns = [aws_lb_target_group.backend.arn]
+  target_group_arns = [aws_lb_target_group.frontend.arn]
 
   launch_template {  #as we used launch template instead of using launch configuration and mixed-instances policy
-    id      = aws_launch_template.backend.id
+    id      = aws_launch_template.frontend.id
     version = "$Latest"
   }
 
@@ -186,7 +186,7 @@ resource "aws_autoscaling_group" "backend" {
 
 resource "aws_autoscaling_policy" "example" {
 
-  autoscaling_group_name = aws_autoscaling_group.backend.name
+  autoscaling_group_name = aws_autoscaling_group.frontend.name
   name                   = "${local.resource_name}-autoscaling-policy"
   policy_type            = "TargetTrackingScaling"
   
@@ -200,20 +200,20 @@ resource "aws_autoscaling_policy" "example" {
   }
 }
 
-#Creating listener_rule record for backend application  ----> backend.app-dev.zone_name
-resource "aws_lb_listener_rule" "backend" {
-  listener_arn = aws_lb_listener.backend.arn
+#Creating listener_rule record for frontend application  ----> frontend.app-dev.zone_name
+resource "aws_lb_listener_rule" "frontend" {
+  listener_arn = aws_lb_listener.frontend.arn
   priority     = 100  #can be 1 - 50000, low priority will be evaluated first.
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+    target_group_arn = aws_lb_target_group.frontend.arn
   }
 
   
   condition {
     host_header {
-      values = ["${var.backend_tags.Component}.app-${var.environment}.var.zone_name"]  #backend.app-dev.mohansai.online
+      values = ["${var.frontend_tags.Component}.app-${var.environment}.var.zone_name"]  #frontend.app-dev.mohansai.online
     }
   }
 }

@@ -52,7 +52,7 @@ module "records" {
       type    = "A"
       alias   = {   #If alias is used, then no need to give ttl
         name    = module.app_alb.dns_name  #dns_name is fixed dns name and zone_id, these values will get from created app_alb module
-        zone_id = module.app_alb.zone_id 
+        zone_id = module.app_alb.zone_id #This belongs ALB internal hosted zone, not ours
       }
       allow-overwrite = true
     }

@@ -8,17 +8,15 @@ variable "environment" {
 
 variable "common_tags" {
     default = {
-        Project = "expnese"
-        Terraform = true
+        Project = "expense"
         Environment = "dev"
-        
+        Terraform = true
     }
 }
 
-variable "backend_tags" {
+variable "web_alb_tags" {
     default = {
-        Component = "backend"
-        
+        Component = "web-alb"
     }
 }
 
