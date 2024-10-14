@@ -355,6 +355,17 @@ resource "aws_security_group_rule" "vpn_public_https" {
     security_group_id = module.web_alb_sg.id
 }
 
+# vpc is connecting the frontend:
+
+resource "aws_security_group_rule" "frontend_vpn" {
+    type = "ingress"
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    source_security_group_id = module.vpn_sg.id
+    security_group_id = module.frontend_sg.id
+}
+
 
 #web_alb is connecting the frontend application:
 
@@ -366,3 +377,16 @@ resource "aws_security_group_rule" "frontend_web_alb" {
     source_security_group_id = module.web_alb_sg.id
     security_group_id = module.frontend_sg.id
 }
+
+# frontend is connecting to app_alb:
+resource "aws_security_group_rule" "app_alb_frontend" {
+    type = "ingress"
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    source_security_group_id = module.frontend_sg.id
+    security_group_id = module.app_alb_sg.id
+}
+
+
+

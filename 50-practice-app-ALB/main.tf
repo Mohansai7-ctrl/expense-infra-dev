@@ -48,7 +48,7 @@ module "records" {
 
   records = [
     {
-      name    = "*.app-${var.environment}"  #  *.app-expense.mohansai.online
+      name    = "*.app-${var.environment}"  #  *.app-dev.mohansai.online
       type    = "A"
       alias   = {   #If alias is used, then no need to give ttl
         name    = module.app_alb.dns_name  #dns_name is fixed dns name and zone_id, these values will get from created app_alb module

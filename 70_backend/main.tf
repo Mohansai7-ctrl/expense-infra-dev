@@ -54,24 +54,24 @@ resource "null_resource" "backend" {
   }
 }
 
-#After the backend application is configured, perform health check by using below:
-/* curl localhost:8080/health
-curl -I localhost:8080/health - It will give you below output:
-HTTP/1.1 200 OK
-X-Powered-By: Express
-Access-Control-Allow-Origin: *
-Content-Type: application/json; charset=utf-8
-Content-Length: 26
-ETag: W/"1a-QZ+7SSwm/0jnTs4ZUIg8XKGjY80"
-Date: Wed, 09 Oct 2024 12:04:13 GMT
-Connection: keep-alive
-Keep-Alive: timeout=5 */
+# #After the backend application is configured, perform health check by using below:
+# /* curl localhost:8080/health
+# curl -I localhost:8080/health - It will give you below output:
+# HTTP/1.1 200 OK
+# X-Powered-By: Express
+# Access-Control-Allow-Origin: *
+# Content-Type: application/json; charset=utf-8
+# Content-Length: 26
+# ETag: W/"1a-QZ+7SSwm/0jnTs4ZUIg8XKGjY80"
+# Date: Wed, 09 Oct 2024 12:04:13 GMT
+# Connection: keep-alive
+# Keep-Alive: timeout=5 */
 
 
 #Now stop the instance to take AMI from it:
 resource "aws_ec2_instance_state" "backend" {
   instance_id = module.backend.id
-  state       = "sto"
+  state       = "stopped"
   depends_on = [null_resource.backend]
 }
 
@@ -147,11 +147,15 @@ resource "aws_autoscaling_group" "backend" {
   
   max_size                  = 10 #till 10 instances will be created using this autoscaling
   min_size                  = 2 #min size using this autoscaling is 2 instances
-  health_check_grace_period = 60
+  health_check_grace_period = 60 #health check to be performed after how many seconds of instance creation
   health_check_type         = "ELB"
   desired_capacity          = 2  #starting of autoscaling group with 2 instances
+ /*  how it works:
+  # first scaling event == (2 initial + 2 from scaling event)
+  # second scaling event == 4 current + 2 additional(min.desired) = 6 instances */
+
   #force_delete              = true
-  target_group_arns = [aws_lb_target_group.backend.arn]
+  target_group_arns = [aws_lb_target_group.backend.arn]  #auto scaling will create targets(new ec2 instances/backend servers) in backend target group
 
   launch_template {  #as we used launch template instead of using launch configuration and mixed-instances policy
     id      = aws_launch_template.backend.id
@@ -159,6 +163,15 @@ resource "aws_autoscaling_group" "backend" {
   }
 
   vpc_zone_identifier       = [local.private_subnet_ids]
+
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50  #When launch_template is changed then that triggers this to perform rolling by maintaining min_healthy_percentage as 50, means let say there are 10 servers(ec2 instances), if launch template changes it will triggers this rolling, then rolling will refresh 50% means 5 instances only(means will create new 5 ec2 instances, once these are up, it will delete old 5 instances) as a batch keeping remaining 5 instances operational so that there will be now downtime for the applications, once this 5 is completed, it performs for other remaining 5 instances in fresh another batch
+
+    }
+    triggers = ["launch_template"]
+  }
 
 
   
@@ -196,14 +209,14 @@ resource "aws_autoscaling_policy" "example" {
       predefined_metric_type = "ASGAverageCPUUtilization"
     }
 
-    target_value = 70.0  #This can be CPU Utilization, memory utilization, if exceeds 70% then this policy will trigger autoscaling group based on max and min size it will create instances
+    target_value = 70.0  #This is average of all current instances - can be CPU Utilization, memory utilization, if exceeds 70% then this policy will trigger autoscaling group based on max and min size it will create instances
   }
 }
 
 #Creating listener_rule record for backend application  ----> backend.app-dev.zone_name
 resource "aws_lb_listener_rule" "backend" {
-  listener_arn = aws_lb_listener.backend.arn
-  priority     = 100  #can be 1 - 50000, low priority will be evaluated first.
+  listener_arn = local.app_alb_listener_arn
+  priority     = 100  #for a single listener, can be many listener rules, can be 1 - 50000, low priority will be evaluated first.
 
   action {
     type             = "forward"
@@ -213,10 +226,17 @@ resource "aws_lb_listener_rule" "backend" {
   
   condition {
     host_header {
-      values = ["${var.backend_tags.Component}.app-${var.environment}.var.zone_name"]  #backend.app-dev.mohansai.online
+      values = ["${var.backend_tags.Component}.app-${var.environment}.${var.zone_name}"]  #backend.app-dev.mohansai.online  ---> forward this request to backend target grouptowards backend application
     }
   }
 }
+
+/* # differen rules from single backend load balancer
+# in above condition, url configured is backend.app-dev.mohansai.online this is achieved by listener rule, but load balancer is *.app-dev.mohansai.online
+# in future we can create many rules example as below:
+# something.app-dev.mohansai.online
+# devops.app-dev.mohansai.online
+# picture.app-dev.mohansai.online */
 
 
 

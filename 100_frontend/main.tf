@@ -8,7 +8,7 @@ module "frontend" {
     ami = local.ami
     instance_type = "t3.micro"
     vpc_security_group_ids = [local.frontend_sg_id]
-    subnet_id = local.private_subnet_ids
+    subnet_id = local.public_subnet_ids
 
     tags = merge(
         var.common_tags,
@@ -24,14 +24,14 @@ module "frontend" {
 
 resource "null_resource" "frontend" {
   # Changes to any instance of the cluster requires re-provisioning
-  triggers = {       #Whenver module.frontend id changes (means any version change in frontend application,) then null_resource triggers this instance id to execute the frontend.sh in shell
+  triggers = {       #Whenver module.frontend id changes (means any version change in frontend application,) then null_resource triggers ,Terraform will destroy the current null_resource and create a new one, thus re-executing its provisioners,here to execute the frontend.sh in shell
     instance_id = module.frontend.id
   }
 
   # Bootstrap script can run on any instance of the cluster
   # So we just choose the first in this case
   connection {
-    host = module.frontend.private_ip  #Connecting to remote server which is frontend server via its private_ip
+    host = module.frontend.private_ip  #Connecting to remote server which is frontend server via its public_ip
     user = "ec2-user"
     password = "DevOps321"
     type = "ssh"
@@ -46,7 +46,7 @@ resource "null_resource" "frontend" {
 
   #executing the frontend.sh inside the frontend server
   provisioner "remote-exec" {
-    # Bootstrap script called with private_ip of each node in the cluster
+    
     inline = [
       "chmod +x /tmp/frontend.sh",
       "sudo sh /tmp/frontend.sh ${var.frontend_tags.Component} ${var.environment}"  #sudo sh file_name.sh $1 == var.frontend_tags.Component, $2 == var.environment. These arguments from Terraform ---> shell
@@ -54,18 +54,18 @@ resource "null_resource" "frontend" {
   }
 }
 
-#After the frontend application is configured, perform health check by using below:
-/* curl localhost:8080/health
-curl -I localhost:8080/health - It will give you below output:
-HTTP/1.1 200 OK
-X-Powered-By: Express
-Access-Control-Allow-Origin: *
-Content-Type: application/json; charset=utf-8
-Content-Length: 26
-ETag: W/"1a-QZ+7SSwm/0jnTs4ZUIg8XKGjY80"
-Date: Wed, 09 Oct 2024 12:04:13 GMT
-Connection: keep-alive
-Keep-Alive: timeout=5 */
+# #After the frontend application is configured, perform health check by using below:
+# /* curl localhost:8080/health
+# curl -I localhost:8080/health - It will give you below output:
+# HTTP/1.1 200 OK
+# X-Powered-By: Express
+# Access-Control-Allow-Origin: *
+# Content-Type: application/json; charset=utf-8
+# Content-Length: 26
+# ETag: W/"1a-QZ+7SSwm/0jnTs4ZUIg8XKGjY80"
+# Date: Wed, 09 Oct 2024 12:04:13 GMT
+# Connection: keep-alive
+# Keep-Alive: timeout=5 */
 
 
 #Now stop the instance to take AMI from it:
@@ -101,17 +101,18 @@ resource "null_resource" "frontend_delete" {
 #Now creating target group resource:
 resource "aws_lb_target_group" "frontend" {
   name     = local.resource_name
-  port     = 8080    #This target group will get triggered when load balncer sends requests of 8080 port having protocol HTTP, it will send to frontend application /its listener
+  port     = 80    #This target group will get triggered when load balncer sends requests of 8080 port having protocol HTTP, it will send to frontend application /its listener
   protocol = "HTTP"
   vpc_id   = local.vpc_id
 
   health_check {
-    path = "/health"
+    path = "/"  #for frontend, nginx only / should be ther, /health for api's usually.
     healthy_threshold = 2
     unhealthy_threshold = 2
     interval = 5
     timeout = 4   #timeout must be less than the interval
     matcher = "200-299"
+    port = 80  #as frontend consists of nginx, allowing port should be 80
     protocol = "HTTP"
 
   }
@@ -151,14 +152,23 @@ resource "aws_autoscaling_group" "frontend" {
   health_check_type         = "ELB"
   desired_capacity          = 2  #starting of autoscaling group with 2 instances
   #force_delete              = true
-  target_group_arns = [aws_lb_target_group.frontend.arn]
+  target_group_arns = [aws_lb_target_group.frontend.arn]  #auto scaling will create targets(new ec2 instances/frontend servers) in frontend target group based on listener rule
 
   launch_template {  #as we used launch template instead of using launch configuration and mixed-instances policy
     id      = aws_launch_template.frontend.id
     version = "$Latest"
   }
 
-  vpc_zone_identifier       = [local.private_subnet_ids]
+  vpc_zone_identifier       = [local.public_subnet_ids]
+
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50  #When launch_template is changed then that triggers this to perform rolling by maintaining min_healthy_percentage as 50, means let say there are 10 servers(ec2 instances), if launch template changes it will triggers this rolling, then rolling will refresh 50%(creates 5 instances of new version, once these are up , it will delete the old 5 instances) means 5 instances only as a batch keeping remaining 5 instances operational so that there will be now downtime for the applications, once this 5 is completed, it performs for other remaining 5 instances in fresh another batch
+
+    }
+    triggers = ["launch_template"]
+  }
 
 
   
@@ -200,10 +210,10 @@ resource "aws_autoscaling_policy" "example" {
   }
 }
 
-#Creating listener_rule record for frontend application  ----> frontend.app-dev.zone_name
+#Creating listener_rule record for frontend application  ----> giving value for the condition,listener rule is expense-dev.zone_name
 resource "aws_lb_listener_rule" "frontend" {
-  listener_arn = aws_lb_listener.frontend.arn
-  priority     = 100  #can be 1 - 50000, low priority will be evaluated first.
+  listener_arn = local.web_alb_listener_arn
+  priority     = 100  #for a single listener, can be many listener rules, can be 1 - 50000, low priority will be evaluated first.
 
   action {
     type             = "forward"
@@ -213,10 +223,16 @@ resource "aws_lb_listener_rule" "frontend" {
   
   condition {
     host_header {
-      values = ["${var.frontend_tags.Component}.app-${var.environment}.var.zone_name"]  #frontend.app-dev.mohansai.online
+      values = ["${var.project_name}-${var.environment}.${var.zone_name}"]  #expense-dev.mohansai.online  ===> request towards expense project website
     }
   }
 }
+
+
+# /* # differen rules from single frontend(web_alb) load balancer
+# # in above condition, url configured is expense-dev.mohansai.online this is achieved by listener rule, but load balancer is *.app-dev.mohansai.online
+
+
 
 
 

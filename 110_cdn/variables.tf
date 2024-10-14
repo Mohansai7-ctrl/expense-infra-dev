@@ -14,10 +14,8 @@ variable "common_tags" {
     }
 }
 
-variable "web_alb_tags" {
-    default = {}
-}
-
-variable "zone_name" {
-    default = "mohansai.online"
+variable "cdn_tags" {
+    default = {
+        Component = "cdn"
+    }
 }

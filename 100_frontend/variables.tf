@@ -15,7 +15,7 @@ variable "common_tags" {
     }
 }
 
-variable "backend_tags" {
+variable "frontend_tags" {
     default = {
         Component = "frontend"
         

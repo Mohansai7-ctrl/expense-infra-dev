@@ -3,7 +3,12 @@ module "web_alb" {
 
   name    = local.resource_name
   vpc_id  = local.vpc_id
-  subnets = ["local.public_subnet_ids"]
+  subnets = local.public_subnet_ids
+  security_groups = [data.aws_ssm_parameter.web_alb_sg_id.value]
+  create_security_group = false
+  enable_deletion_protection = false
+  
+
 
   
   tags = merge(
@@ -19,15 +24,14 @@ resource "aws_lb_listener" "web_alb_http" {
   load_balancer_arn = module.web_alb.arn
   port              = "80"
   protocol          = "HTTP"
-  ssl_policy        = "ELBSecurityPolicy-2016-08"
-  certificate_arn   = local.https_certificate_arn
+  
 
   default_action {
     type = "fixed-response"
 
     fixed_response {
       content_type = "text/html"
-      message_body = ".<h1>This is from web alb http 80<h2>"
+      message_body = "<h1>This is from web alb http 80</h1>"
       status_code  = "200"
     }
   }
@@ -46,7 +50,7 @@ resource "aws_lb_listener" "web_alb_https" {
 
     fixed_response {
       content_type = "text/html"
-      message_body = ".<h1>This is from web alb https 443<h2>"
+      message_body = "<h1>This is from web alb https 443</h1>"
       status_code  = "200"
     }
   }
