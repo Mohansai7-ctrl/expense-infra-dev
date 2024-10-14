@@ -112,6 +112,7 @@ resource "aws_lb_target_group" "backend" {
     interval = 5
     timeout = 4   #timeout must be less than the interval
     matcher = "200-299"
+    port = 8080
     protocol = "HTTP"
 
   }
@@ -143,16 +144,16 @@ resource "aws_launch_template" "backend" {   #To create auto-scaling we need to 
 
 #Create auto-scaling using launch template in target group:
 resource "aws_autoscaling_group" "backend" {
-  name     = local.resource_name
+  name     = "${local.resource_name}-autoscaling-group"
   
   max_size                  = 10 #till 10 instances will be created using this autoscaling
   min_size                  = 2 #min size using this autoscaling is 2 instances
   health_check_grace_period = 60 #health check to be performed after how many seconds of instance creation
   health_check_type         = "ELB"
   desired_capacity          = 2  #starting of autoscaling group with 2 instances
- /*  how it works:
-  # first scaling event == (2 initial + 2 from scaling event)
-  # second scaling event == 4 current + 2 additional(min.desired) = 6 instances */
+#  /*  how it works:
+#   # first scaling event == (2 initial + 2 from scaling event)
+#   # second scaling event == 4 current + 2 additional(min.desired) = 6 instances */
 
   #force_delete              = true
   target_group_arns = [aws_lb_target_group.backend.arn]  #auto scaling will create targets(new ec2 instances/backend servers) in backend target group
@@ -188,7 +189,7 @@ resource "aws_autoscaling_group" "backend" {
   }
 
   tag {
-    key                 = "project"
+    key                 = "Project"
     value               = "expense"
     propagate_at_launch = false
   }
@@ -199,9 +200,10 @@ resource "aws_autoscaling_group" "backend" {
 
 resource "aws_autoscaling_policy" "example" {
 
-  autoscaling_group_name = aws_autoscaling_group.backend.name
+  
   name                   = "${local.resource_name}-autoscaling-policy"
   policy_type            = "TargetTrackingScaling"
+  autoscaling_group_name = aws_autoscaling_group.backend.name
   
 
   target_tracking_configuration {

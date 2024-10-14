@@ -19,3 +19,7 @@ variable "cdn_tags" {
         Component = "cdn"
     }
 }
+
+variable "zone_name" {
+    default = "mohansai.online"
+}

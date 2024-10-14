@@ -3,16 +3,20 @@ resource "aws_cloudfront_distribution" "expense" {
     domain_name              = "${var.project_name}-${var.environment}.${var.zone_name}" #expense-dev.mohansai.online ---> this request forwards or towards the expense website
     
     origin_id                = "${var.project_name}-${var.environment}.${var.zone_name}"
-  }
 
-  custom_origin_config {
+    custom_origin_config {
     http_port = 80
     https_port = 443
     origin_protocol_policy = "https-only"
     origin_ssl_protocols = ["TLSv1.2"]
+    
+    }
+    
 
+  
   }
 
+  
   enabled             = true
   
 
@@ -85,9 +89,9 @@ resource "aws_cloudfront_distribution" "expense" {
   )
 
   viewer_certificate {
-    acm_certificate_arn = local.https_certificat_arn
+    acm_certificate_arn = local.https_certificate_arn
     ssl_support_method = "sni-only"
-    minimun_protocol_version = "TLSv1.2_2021"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 }
 

@@ -185,7 +185,7 @@ resource "aws_autoscaling_group" "frontend" {
   }
 
   tag {
-    key                 = "project"
+    key                 = "Project"
     value               = "expense"
     propagate_at_launch = false
   }
