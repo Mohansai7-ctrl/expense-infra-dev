@@ -1,5 +1,5 @@
 resource "aws_cloudfront_distribution" "expense" {
-  origin {
+  origin {   #origin can be anythings, s3, http or any web server, web services like Elementary MediaPackages and MediaStore, ALB and API Gateway ...etc.,.
     domain_name              = "${var.project_name}-${var.environment}.${var.zone_name}" #expense-dev.mohansai.online ---> this request forwards or towards the expense website
     
     origin_id                = "${var.project_name}-${var.environment}.${var.zone_name}"
@@ -23,7 +23,7 @@ resource "aws_cloudfront_distribution" "expense" {
   aliases = ["${var.project_name}-cdn.${var.zone_name}"]  #expense-cdn.mohansai.online
 
 
-#default_cache behavior its last in the preferences, dynamic content evaluated at last and no cache
+ #default_cache behavior its last in the preferences, dynamic content evaluated at last and no cache
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
@@ -76,7 +76,7 @@ resource "aws_cloudfront_distribution" "expense" {
   restrictions {
     geo_restriction {
       restriction_type = "whitelist"
-      locations        = ["IN", "CA", "GB", "DE"]
+      locations        = ["US", "IN", "CA", "GB", "DE"]
     }
   }
 
