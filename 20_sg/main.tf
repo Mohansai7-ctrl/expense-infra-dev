@@ -346,7 +346,7 @@ resource "aws_security_group_rule" "web_alb_public_http" {
 }
 
 #public(443-https) is connecting the web_alb:
-resource "aws_security_group_rule" "vpn_public_https" {
+resource "aws_security_group_rule" "web_alb_public_https" {
     type = "ingress"
     from_port = 443
     to_port = 443
